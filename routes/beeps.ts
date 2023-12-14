@@ -76,6 +76,8 @@ export const createBeepRoutes = (router: Router) => {
       const beepPath = path.join(__dirname, "../beeps", name, "handler.js");
       const result = await executeBeep(beepPath, { body: (body || "").toString(), headers }, variables || {}, timeout);
 
+      console.log('Beep', beepId, 'responded with', result);
+
       if (waitForResponse) {
         res.status(result.statusCode).send(JSON.parse(result.body));
       }
