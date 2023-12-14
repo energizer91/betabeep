@@ -3,14 +3,14 @@ import { v4 as uuidv4 } from "uuid";
 
 export const saveResult = async (
   beepId: string,
-  result: string,
+  data: string,
   type = "result",
   session = uuidv4()
 ) => {
   const record = new Record({
     type,
     beepId,
-    result,
+    data,
     session,
   });
 
