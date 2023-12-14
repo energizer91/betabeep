@@ -4,23 +4,24 @@ import fs from "fs";
 import { Beep } from "./models/beep";
 
 export type BeepConfig = {
-  method: "GET" | "POST",
-  name: string,
-  waitForResponse?: boolean,
-  variables?: Record<string, string | undefined> | null | undefined,
-  timeout?: number,
-}
+  method: "GET" | "POST";
+  name: string;
+  waitForResponse?: boolean;
+  variables?: Record<string, string | undefined> | null | undefined;
+  timeout?: number;
+};
 
 // Utility to promisify exec for async/await usage
-const execAsync = (command: string, options: Parameters<typeof exec>[1]) => new Promise((resolve, reject) => {
-  exec(command, options, (error, stdout, stderr) => {
-    if (error) {
-      reject(error);
-      return;
-    }
-    resolve({ stdout, stderr });
+const execAsync = (command: string, options: Parameters<typeof exec>[1]) =>
+  new Promise((resolve, reject) => {
+    exec(command, options, (error, stdout, stderr) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
   });
-});
 
 export const setupBeep = async (url: string, config: BeepConfig) => {
   const beepsPath = path.join(__dirname, "beeps");

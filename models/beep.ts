@@ -4,24 +4,24 @@ const beepSchema = new mongoose.Schema({
   method: {
     type: String,
     enum: ["GET", "POST"],
-    default: "POST"
+    default: "POST",
   },
   name: {
     type: String,
-    required: true
+    required: true,
   },
   waitForResponse: {
     type: Boolean,
-    default: true
+    default: true,
   },
   variables: {
     type: Object,
-    default: {}
+    default: {},
   },
   timeout: {
     type: Number,
-    default: 30000
-  }
+    default: 30000,
+  },
 });
 
 export const Beep = mongoose.model("Beep", beepSchema);

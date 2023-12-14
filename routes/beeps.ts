@@ -3,18 +3,24 @@ import { fork } from "child_process";
 import { type Router } from "express";
 import type { IncomingHttpHeaders } from "node:http";
 import { getBeep, getBeeps, setupBeep, updateBeep } from "../beepManager";
+import { getRecords, saveResult } from "../recordManager";
 
 type BeepResponse = {
   statusCode: number;
   body: string;
-}
+};
 
 type BeepPayload = {
   body: string;
   headers: IncomingHttpHeaders;
-}
+};
 
-function executeBeep(name: string, payload: BeepPayload, variables = {}, timeout = 0): Promise<BeepResponse> {
+function executeBeep(
+  name: string,
+  payload: BeepPayload,
+  variables = {},
+  timeout = 30000
+): Promise<BeepResponse> {
   return new Promise((resolve, reject) => {
     const beepProcess = fork("bootstrap.js", { env: variables });
 
@@ -58,12 +64,21 @@ export const createBeepRoutes = (router: Router) => {
     try {
       // get from database later
       const beepConfig = await getBeep(beepId);
+      const bodyString = (body || "").toString();
 
       if (!beepConfig) {
         return next();
       }
 
-      const { method: beepMethod, name, variables, waitForResponse, timeout } = beepConfig;
+      const { session } = await saveResult(beepId, bodyString, "request");
+
+      const {
+        method: beepMethod,
+        name,
+        variables,
+        waitForResponse,
+        timeout,
+      } = beepConfig;
 
       if (beepMethod && beepMethod !== method) {
         return next();
@@ -74,9 +89,16 @@ export const createBeepRoutes = (router: Router) => {
       }
 
       const beepPath = path.join(__dirname, "../beeps", name, "handler.js");
-      const result = await executeBeep(beepPath, { body: (body || "").toString(), headers }, variables || {}, timeout);
+      const result = await executeBeep(
+        beepPath,
+        { body: bodyString.toString(), headers },
+        variables || {},
+        timeout
+      );
 
-      console.log('Beep', beepId, 'responded with', result);
+      await saveResult(beepId, JSON.stringify(result), "response", session);
+
+      console.log("Beep", beepId, "responded with", result);
 
       if (waitForResponse) {
         res.status(result.statusCode).send(JSON.parse(result.body));
@@ -90,12 +112,17 @@ export const createBeepRoutes = (router: Router) => {
     const { url, config } = req.body;
 
     if (!url || !config) {
-      return res.status(400).json({ message: "Git URL and beep configuration are required" });
+      return res
+        .status(400)
+        .json({ message: "Git URL and beep configuration are required" });
     }
 
     try {
       const newBeep = await setupBeep(url, config);
-      res.status(200).send({ message: "Beep successfully added, cloned, and installed", path: `/beeps/${newBeep.id}/invoke` });
+      res.status(200).send({
+        message: "Beep successfully added, cloned, and installed",
+        path: `/beeps/${newBeep.id}/invoke`,
+      });
     } catch (error) {
       return next(error);
     }
@@ -113,7 +140,11 @@ export const createBeepRoutes = (router: Router) => {
       }
 
       await updateBeep(beep.name);
-      res.status(200).send({ message: "Beep successfully updated", path: `/beeps/${beep.id}` });
+
+      res.status(200).send({
+        message: "Beep successfully updated",
+        path: `/beeps/${beep.id}`,
+      });
     } catch (error) {
       return next(error);
     }
@@ -145,7 +176,28 @@ export const createBeepRoutes = (router: Router) => {
         return res.status(400).json({ message: "Beeps not found" });
       }
 
-      return res.json(beeps.map(b => ({ ...b.toObject(), variables: "hidden" })));
+      return res.json(
+        beeps.map((b) => ({ ...b.toObject(), variables: "hidden" }))
+      );
+    } catch (e) {
+      return next(e);
+    }
+  });
+
+  // get beep logs
+  router.get("/:beepId/records", async (req, res, next) => {
+    const { beepId } = req.params;
+
+    try {
+      const beep = await getBeep(beepId);
+
+      if (!beep) {
+        return res.status(400).json({ message: "Beep not found" });
+      }
+
+      const records = await getRecords(beepId);
+
+      return res.json(records);
     } catch (e) {
       return next(e);
     }
