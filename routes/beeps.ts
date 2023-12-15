@@ -187,6 +187,7 @@ export const createBeepRoutes = (router: Router) => {
   // get beep logs
   router.get("/:beepId/records", async (req, res, next) => {
     const { beepId } = req.params;
+    const { skip, limit } = req.query;
 
     try {
       const beep = await getBeep(beepId);
@@ -195,7 +196,7 @@ export const createBeepRoutes = (router: Router) => {
         return res.status(400).json({ message: "Beep not found" });
       }
 
-      const records = await getRecords(beepId);
+      const records = await getRecords(beepId, Number(skip), Number(limit));
 
       return res.json(records);
     } catch (e) {
