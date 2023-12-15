@@ -1,208 +1,114 @@
-import path from "path";
-import { fork } from "child_process";
-import { type Router } from "express";
-import type { IncomingHttpHeaders } from "node:http";
+import express from "express";
 import { getBeep, getBeeps, setupBeep, updateBeep } from "../beepManager";
-import { getRecords, saveResult } from "../recordManager";
+import { getRecords } from "../recordManager";
+import { beepInvocationRoute } from "./invoke";
 
-type BeepResponse = {
-  statusCode: number;
-  body: string;
-};
+const router = express.Router();
 
-type BeepPayload = {
-  body: string;
-  headers: IncomingHttpHeaders;
-};
+router.use(
+  "/:beepId/invoke",
+  // special case for beeps execution. they should get exactly the same body as request executor
+  express.raw({ inflate: true, limit: "100kb", type: "*/*" }),
+  beepInvocationRoute
+);
 
-function executeBeep(
-  name: string,
-  payload: BeepPayload,
-  variables = {},
-  timeout = 30000
-): Promise<BeepResponse> {
-  return new Promise((resolve, reject) => {
-    const beepProcess = fork("bootstrap.js", { env: variables });
+// for the rest we can use default json body parser
+router.use(express.json());
 
-    let timer: NodeJS.Timeout;
+router.post("/", async (req, res, next) => {
+  const { url, config } = req.body;
 
-    if (timeout > 0) {
-      timer = setTimeout(() => {
-        if (beepProcess) {
-          beepProcess.kill();
-          reject(new Error("process timed out"));
-        }
-      }, timeout);
-    }
+  if (!url || !config) {
+    return res
+      .status(400)
+      .json({ message: "Git URL and beep configuration are required" });
+  }
 
-    beepProcess.on("message", (message: BeepResponse) => {
-      clearTimeout(timer);
-      resolve(message);
+  try {
+    const newBeep = await setupBeep(url, config);
+    res.status(200).send({
+      message: "Beep successfully added, cloned, and installed",
+      path: `/beeps/${newBeep.id}/invoke`,
     });
+  } catch (error) {
+    return next(error);
+  }
+});
 
-    beepProcess.on("error", (error) => {
-      clearTimeout(timer);
-      reject(error);
+// update endpoint (git pull + yarn install)
+router.post("/:beepId", async (req, res, next) => {
+  const { beepId } = req.params;
+
+  try {
+    const beep = await getBeep(beepId);
+
+    if (!beep) {
+      return res.status(400).json({ message: "Beep not found" });
+    }
+
+    await updateBeep(beep.name);
+
+    res.status(200).send({
+      message: "Beep successfully updated",
+      path: `/beeps/${beep.id}`,
     });
-    beepProcess.on("exit", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        reject(new Error(`Beep process exited with code ${code}`));
-      }
-    });
+  } catch (error) {
+    return next(error);
+  }
+});
 
-    // Send initial message with lambda name and body
-    beepProcess.send({ name, payload });
-  });
-}
+router.get("/:beepId", async (req, res, next) => {
+  const { beepId } = req.params;
 
-export const createBeepRoutes = (router: Router) => {
-  router.use("/:beepId/invoke", async (req, res, next) => {
-    const { body, params, method, headers } = req;
-    const { beepId } = params;
+  try {
+    const beep = await getBeep(beepId);
 
-    try {
-      // get from database later
-      const beepConfig = await getBeep(beepId);
-      const bodyString = (body || "").toString();
-
-      if (!beepConfig) {
-        return next();
-      }
-
-      const { session } = await saveResult(beepId, bodyString, "request");
-
-      const {
-        method: beepMethod,
-        name,
-        variables,
-        waitForResponse,
-        timeout,
-      } = beepConfig;
-
-      if (beepMethod && beepMethod !== method) {
-        return next();
-      }
-
-      if (!waitForResponse) {
-        res.status(200).send({ ok: true });
-      }
-
-      const beepPath = path.join(__dirname, "../beeps", name, "handler.js");
-      const result = await executeBeep(
-        beepPath,
-        { body: bodyString.toString(), headers },
-        variables || {},
-        timeout
-      );
-
-      await saveResult(beepId, JSON.stringify(result), "response", session);
-
-      console.log("Beep", beepId, "responded with", result);
-
-      if (waitForResponse) {
-        res.status(result.statusCode).send(JSON.parse(result.body));
-      }
-    } catch (e) {
-      return next(e);
-    }
-  });
-
-  router.post("/", async (req, res, next) => {
-    const { url, config } = req.body;
-
-    if (!url || !config) {
-      return res
-        .status(400)
-        .json({ message: "Git URL and beep configuration are required" });
+    if (!beep) {
+      return res.status(400).json({ message: "Beep not found" });
     }
 
-    try {
-      const newBeep = await setupBeep(url, config);
-      res.status(200).send({
-        message: "Beep successfully added, cloned, and installed",
-        path: `/beeps/${newBeep.id}/invoke`,
-      });
-    } catch (error) {
-      return next(error);
+    const beepInfo = { ...beep.toObject(), variables: "hidden" };
+
+    return res.json(beepInfo);
+  } catch (e) {
+    return next(e);
+  }
+});
+
+router.get("/", async (req, res, next) => {
+  try {
+    const beeps = await getBeeps();
+
+    if (!beeps) {
+      return res.status(400).json({ message: "Beeps not found" });
     }
-  });
 
-  // update endpoint (git pull + yarn install)
-  router.post("/:beepId", async (req, res, next) => {
-    const { beepId } = req.params;
+    return res.json(
+      beeps.map((b) => ({ ...b.toObject(), variables: "hidden" }))
+    );
+  } catch (e) {
+    return next(e);
+  }
+});
 
-    try {
-      const beep = await getBeep(beepId);
+// get beep logs
+router.get("/:beepId/records", async (req, res, next) => {
+  const { beepId } = req.params;
+  const { skip, limit } = req.query;
 
-      if (!beep) {
-        return res.status(400).json({ message: "Beep not found" });
-      }
+  try {
+    const beep = await getBeep(beepId);
 
-      await updateBeep(beep.name);
-
-      res.status(200).send({
-        message: "Beep successfully updated",
-        path: `/beeps/${beep.id}`,
-      });
-    } catch (error) {
-      return next(error);
+    if (!beep) {
+      return res.status(400).json({ message: "Beep not found" });
     }
-  });
 
-  router.get("/:beepId", async (req, res, next) => {
-    const { beepId } = req.params;
+    const records = await getRecords(beepId, Number(skip), Number(limit));
 
-    try {
-      const beep = await getBeep(beepId);
+    return res.json(records);
+  } catch (e) {
+    return next(e);
+  }
+});
 
-      if (!beep) {
-        return res.status(400).json({ message: "Beep not found" });
-      }
-
-      const beepInfo = { ...beep.toObject(), variables: "hidden" };
-
-      return res.json(beepInfo);
-    } catch (e) {
-      return next(e);
-    }
-  });
-
-  router.get("/", async (req, res, next) => {
-    try {
-      const beeps = await getBeeps();
-
-      if (!beeps) {
-        return res.status(400).json({ message: "Beeps not found" });
-      }
-
-      return res.json(
-        beeps.map((b) => ({ ...b.toObject(), variables: "hidden" }))
-      );
-    } catch (e) {
-      return next(e);
-    }
-  });
-
-  // get beep logs
-  router.get("/:beepId/records", async (req, res, next) => {
-    const { beepId } = req.params;
-    const { skip, limit } = req.query;
-
-    try {
-      const beep = await getBeep(beepId);
-
-      if (!beep) {
-        return res.status(400).json({ message: "Beep not found" });
-      }
-
-      const records = await getRecords(beepId, Number(skip), Number(limit));
-
-      return res.json(records);
-    } catch (e) {
-      return next(e);
-    }
-  });
-
-  return router;
-};
+export default router;

@@ -25,7 +25,8 @@ const execAsync = (command: string, options: Parameters<typeof exec>[1]) =>
 
 export const setupBeep = async (url: string, config: BeepConfig) => {
   const beepsPath = path.join(__dirname, "beeps");
-  const beepPath = path.join(beepsPath, config.name);
+  const newBeep = new Beep(config);
+  const beepPath = path.join(beepsPath, newBeep.id);
 
   if (fs.existsSync(beepPath)) {
     throw new Error("Beep is already installed");
@@ -38,15 +39,14 @@ export const setupBeep = async (url: string, config: BeepConfig) => {
   await execAsync(`yarn install`, { cwd: beepPath });
 
   // save lambda in db
-  const newBeep = new Beep(config);
   await newBeep.save();
 
   return newBeep;
 };
 
-export const updateBeep = async (name: string) => {
+export const updateBeep = async (beepId: string) => {
   const beepsPath = path.join(__dirname, "beeps");
-  const beepPath = path.join(beepsPath, name);
+  const beepPath = path.join(beepsPath, beepId);
 
   if (!fs.existsSync(beepPath)) {
     throw new Error("Beep is not installed");

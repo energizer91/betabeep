@@ -2,24 +2,13 @@ require("dotenv").config();
 
 import { connectToMongoDB } from "./database";
 import express, { ErrorRequestHandler } from "express";
-import { createBeepRoutes } from "./routes/beeps";
+import beepRouter from "./routes/beeps";
 
 connectToMongoDB();
 
 const app = express();
-const router = express.Router();
 
-// special case for beeps execution. they should get exactly the same body as request executor
-app.use(
-  "/beeps/:beep/invoke",
-  express.raw({ inflate: true, limit: "100kb", type: "*/*" })
-);
-// for the rest we can use default json body parser
-app.use(express.json());
-
-createBeepRoutes(router);
-
-app.use("/beeps", router);
+app.use("/beeps", beepRouter);
 
 // 404 Middleware
 app.use((req, res, next) => {
