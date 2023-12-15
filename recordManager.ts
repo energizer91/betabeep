@@ -20,5 +20,8 @@ export const saveResult = async (
 };
 
 export const getRecords = async (beepId: string, skip = 0, limit = 100) => {
-  return Record.find({ beepId: beepId }).skip(skip).limit(limit);
+  return Record.find({ beepId: beepId })
+    .sort({ timestamp: -1 })
+    .skip(skip)
+    .limit(limit);
 };
