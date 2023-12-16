@@ -59,6 +59,20 @@ export const updateBeep = async (beepId: string) => {
   await execAsync(`yarn install`, { cwd: beepPath });
 };
 
+export const deleteBeep = async (beepId: string) => {
+  const beep = await Beep.findByIdAndDelete(beepId);
+
+  if (!beep) {
+    throw new Error("Beep not found");
+  }
+
+  const beepsPath = path.join(__dirname, "beeps");
+  const beepPath = path.join(beepsPath, beepId);
+
+  // Git clone
+  await execAsync(`rm -rf ${beepPath}`, {});
+};
+
 export const getBeep = async (id: string) => {
   const beep = Beep.findById(id);
 

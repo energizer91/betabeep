@@ -1,5 +1,11 @@
 import express from "express";
-import { getBeep, getBeeps, setupBeep, updateBeep } from "../beepManager";
+import {
+  deleteBeep,
+  getBeep,
+  getBeeps,
+  setupBeep,
+  updateBeep,
+} from "../beepManager";
 import { getRecords } from "../recordManager";
 import { beepInvocationRoute } from "./invoke";
 
@@ -51,6 +57,21 @@ router.post("/:beepId", async (req, res, next) => {
     res.status(200).send({
       message: "Beep successfully updated",
       path: `/beeps/${beep.id}`,
+    });
+  } catch (error) {
+    return next(error);
+  }
+});
+
+// delete beep (rm -rf)
+router.delete("/:beepId", async (req, res, next) => {
+  const { beepId } = req.params;
+
+  try {
+    await deleteBeep(beepId);
+
+    res.status(200).send({
+      message: "Beep successfully deleted",
     });
   } catch (error) {
     return next(error);
