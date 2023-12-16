@@ -45,6 +45,12 @@ export const setupBeep = async (url: string, config: BeepConfig) => {
 };
 
 export const updateBeep = async (beepId: string) => {
+  const beep = await getBeep(beepId);
+
+  if (!beep) {
+    throw new Error("Beep not found");
+  }
+
   const beepsPath = path.join(__dirname, "beeps");
   const beepPath = path.join(beepsPath, beepId);
 

@@ -46,17 +46,11 @@ router.post("/:beepId", async (req, res, next) => {
   const { beepId } = req.params;
 
   try {
-    const beep = await getBeep(beepId);
-
-    if (!beep) {
-      return res.status(400).json({ message: "Beep not found" });
-    }
-
-    await updateBeep(beep.name);
+    await updateBeep(beepId);
 
     res.status(200).send({
       message: "Beep successfully updated",
-      path: `/beeps/${beep.id}`,
+      path: `/beeps/${beepId}`,
     });
   } catch (error) {
     return next(error);
