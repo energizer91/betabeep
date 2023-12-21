@@ -18,6 +18,7 @@ const recordSchema = new mongoose.Schema({
   timestamp: {
     type: Date,
     default: Date.now, // Automatically set to current date and time
+    expires: 60 * 60 * 24 * 30,
   },
   data: {
     type: String,
